@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/executor"
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/model"
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/retry"
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/store"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/executor"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/model"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/retry"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

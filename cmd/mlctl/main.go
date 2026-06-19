@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/model"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/model"
 )
 
 func serverURL() string {

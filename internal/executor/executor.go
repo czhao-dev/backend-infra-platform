@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/metrics"
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/model"
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/retry"
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/store"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/metrics"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/model"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/retry"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/store"
 )
 
 // Executor runs jobs as subprocesses and drives their state transitions.

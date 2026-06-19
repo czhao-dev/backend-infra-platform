@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/model"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/model"
 )
 
 // JobRunner executes a single job to completion, updating its state in the

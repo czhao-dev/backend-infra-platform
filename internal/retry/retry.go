@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/czhao-dev/ML-Job-Orchestrator/internal/model"
+	"github.com/czhao-dev/ml-job-orchestrator/internal/model"
 )
 
 const maxBackoff = 60 * time.Second

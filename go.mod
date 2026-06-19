@@ -1,4 +1,4 @@
-module github.com/czhao-dev/ML-Job-Orchestrator
+module github.com/czhao-dev/ml-job-orchestrator
 
 go 1.26.4
 
