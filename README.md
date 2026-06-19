@@ -64,7 +64,7 @@ failure recovery, and observability.
 ┌─────────────────────────────────────────────────────────────────┐
 │  Scheduler                                                      │
 │  Polls the pending job store every 500ms, applies priority      │
-│  ordering, writes ready jobs to the job queue channel            │
+│  ordering, writes ready jobs to the job queue channel           │
 └──────────────────────────┬──────────────────────────────────────┘
                            │  chan Job (buffered)
                            ▼
