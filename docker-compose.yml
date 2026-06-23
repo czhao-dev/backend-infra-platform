@@ -1,0 +1,66 @@
+services:
+  orchestrator-1:
+    build: ./ml-job-orchestrator
+    environment:
+      - MLORCH_PORT=8080
+      - MLORCH_NUM_WORKERS=4
+      - MLORCH_QUEUE_SIZE=100
+      - MLORCH_SHUTDOWN_TIMEOUT=8s
+    expose:
+      - "8080"
+
+  orchestrator-2:
+    build: ./ml-job-orchestrator
+    environment:
+      - MLORCH_PORT=8080
+      - MLORCH_NUM_WORKERS=4
+      - MLORCH_QUEUE_SIZE=100
+      - MLORCH_SHUTDOWN_TIMEOUT=8s
+    expose:
+      - "8080"
+
+  orchestrator-3:
+    build: ./ml-job-orchestrator
+    environment:
+      - MLORCH_PORT=8080
+      - MLORCH_NUM_WORKERS=4
+      - MLORCH_QUEUE_SIZE=100
+      - MLORCH_SHUTDOWN_TIMEOUT=8s
+    expose:
+      - "8080"
+
+  proxy:
+    build: ./reverse-proxy-load-balancer
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./config/proxy.yaml:/config.yaml:ro
+    command: ["-config=/config.yaml"]
+    depends_on:
+      - orchestrator-1
+      - orchestrator-2
+      - orchestrator-3
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    depends_on:
+      - orchestrator-1
+      - orchestrator-2
+      - orchestrator-3
+      - proxy
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./ml-job-orchestrator/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ml-job-orchestrator/grafana/dashboard.json:/var/lib/grafana/dashboards/dashboard.json:ro
+    depends_on:
+      - prometheus

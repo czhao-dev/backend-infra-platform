@@ -1,0 +1,6 @@
+go 1.26.4
+
+use (
+	./ml-job-orchestrator
+	./reverse-proxy-load-balancer
+)
