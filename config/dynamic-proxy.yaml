@@ -1,0 +1,31 @@
+server:
+  listen_addr: ":8080"
+  read_timeout: "5s"
+  write_timeout: "10s"
+  shutdown_timeout: "5s"
+
+load_balancer:
+  strategy: "least_conn"
+  max_retries: 2
+  backend_timeout: "2s"
+
+health_check:
+  enabled: true
+  path: "/healthz"
+  interval: "2s"
+  timeout: "500ms"
+  unhealthy_threshold: 2
+  healthy_threshold: 2
+
+discovery:
+  enabled: true
+  control_plane_url: "http://control-plane:7070/api/v1/proxy/backends"
+  refresh_interval: "5s"
+
+logging:
+  level: "info"
+  format: "json"
+
+metrics:
+  enabled: true
+  path: "/metrics"

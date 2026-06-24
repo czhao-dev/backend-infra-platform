@@ -35,16 +35,29 @@ func main() {
 	logger := logging.New(cfg.Logging.Level, cfg.Logging.Format)
 	slog.SetDefault(logger)
 
-	backends := make([]*backend.Backend, 0, len(cfg.Backends))
-	for _, bc := range cfg.Backends {
-		b, err := backend.New(bc.Name, bc.URL, bc.Weight)
-		if err != nil {
-			logger.Error("invalid backend url", "backend", bc.Name, "url", bc.URL, "error", err)
-			os.Exit(1)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var pool *backend.Pool
+	if cfg.Discovery.Enabled {
+		// Starts empty; the ConfigProvider's immediate first fetch (in
+		// Run, below) populates it before the health checker's first tick.
+		pool = backend.NewPool(nil)
+		provider := backend.NewConfigProvider(pool, cfg.Discovery.ControlPlaneURL, time.Duration(cfg.Discovery.RefreshInterval), logger)
+		go provider.Run(ctx)
+		logger.Info("dynamic backend discovery enabled", "control_plane_url", cfg.Discovery.ControlPlaneURL, "refresh_interval", cfg.Discovery.RefreshInterval)
+	} else {
+		backends := make([]*backend.Backend, 0, len(cfg.Backends))
+		for _, bc := range cfg.Backends {
+			b, err := backend.New(bc.Name, bc.URL, bc.Weight)
+			if err != nil {
+				logger.Error("invalid backend url", "backend", bc.Name, "url", bc.URL, "error", err)
+				os.Exit(1)
+			}
+			backends = append(backends, b)
 		}
-		backends = append(backends, b)
+		pool = backend.NewPool(backends)
 	}
-	pool := backend.NewPool(backends)
 
 	lb, err := balancer.New(cfg.LoadBalancer.Strategy)
 	if err != nil {
@@ -80,9 +93,6 @@ func main() {
 		WriteTimeout: time.Duration(cfg.Server.WriteTimeout),
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	if cfg.HealthCheck.Enabled {
 		checker := health.New(pool, health.Config{
 			Path:               cfg.HealthCheck.Path,
@@ -93,13 +103,13 @@ func main() {
 		}, logger, m.SetBackendHealth)
 		go checker.Run(ctx)
 	} else {
-		for _, b := range backends {
+		for _, b := range pool.Backends() {
 			m.SetBackendHealth(b.Name, true)
 		}
 	}
 
 	go func() {
-		logger.Info("proxy listening", "addr", cfg.Server.ListenAddr, "strategy", lb.Name(), "backends", len(backends))
+		logger.Info("proxy listening", "addr", cfg.Server.ListenAddr, "strategy", lb.Name(), "backends", len(pool.Backends()))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Error("server error", "error", err)
 			os.Exit(1)

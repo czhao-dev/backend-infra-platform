@@ -1,6 +1,9 @@
 package backend
 
-import "testing"
+import (
+	"sync"
+	"testing"
+)
 
 func TestPool_Healthy(t *testing.T) {
 	b1, _ := New("b1", "http://localhost:9001", 1)
@@ -48,4 +51,43 @@ func TestBackend_InvalidURL(t *testing.T) {
 	if _, err := New("b1", "http://[::1]:namedport", 1); err == nil {
 		t.Error("expected error for invalid backend URL")
 	}
+}
+
+func TestPool_SwapReplacesBackends(t *testing.T) {
+	b1, _ := New("b1", "http://localhost:9001", 1)
+	pool := NewPool([]*Backend{b1})
+
+	if len(pool.Backends()) != 1 {
+		t.Fatalf("expected 1 backend before swap, got %d", len(pool.Backends()))
+	}
+
+	b2, _ := New("b2", "http://localhost:9002", 1)
+	b3, _ := New("b3", "http://localhost:9003", 1)
+	pool.Swap([]*Backend{b2, b3})
+
+	got := pool.Backends()
+	if len(got) != 2 || got[0].Name != "b2" || got[1].Name != "b3" {
+		t.Errorf("expected swapped backends [b2 b3], got %v", got)
+	}
+}
+
+func TestPool_SwapIsRaceFree(t *testing.T) {
+	b1, _ := New("b1", "http://localhost:9001", 1)
+	pool := NewPool([]*Backend{b1})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			b, _ := New("bx", "http://localhost:9999", 1)
+			pool.Swap([]*Backend{b})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = pool.Healthy()
+			_ = pool.Backends()
+		}()
+	}
+	wg.Wait()
 }

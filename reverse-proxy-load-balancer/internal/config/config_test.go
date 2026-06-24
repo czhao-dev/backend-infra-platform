@@ -101,3 +101,44 @@ func TestLoad_MissingFile(t *testing.T) {
 		t.Error("expected error for missing config file")
 	}
 }
+
+func TestLoad_DiscoveryEnabledAllowsNoBackends(t *testing.T) {
+	path := writeTempConfig(t, `
+discovery:
+  enabled: true
+  control_plane_url: "http://control-plane:7070/api/v1/proxy/backends"
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Discovery.Enabled {
+		t.Error("expected discovery.enabled to be true")
+	}
+	if time.Duration(cfg.Discovery.RefreshInterval) != 5*time.Second {
+		t.Errorf("expected default refresh_interval of 5s, got %s", time.Duration(cfg.Discovery.RefreshInterval))
+	}
+}
+
+func TestLoad_DiscoveryEnabledRequiresControlPlaneURL(t *testing.T) {
+	path := writeTempConfig(t, `
+discovery:
+  enabled: true
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Error("expected error when discovery is enabled without a control_plane_url")
+	}
+}
+
+func TestLoad_RejectsNoBackendsWhenDiscoveryDisabled(t *testing.T) {
+	path := writeTempConfig(t, `
+discovery:
+  enabled: false
+`)
+
+	if _, err := Load(path); err == nil {
+		t.Error("expected error when discovery is disabled and no backends are configured")
+	}
+}

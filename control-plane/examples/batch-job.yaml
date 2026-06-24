@@ -1,0 +1,10 @@
+name: image-processing
+type: batch
+command: "sleep"
+args: ["3"]
+replicas: 20
+max_retries: 3
+restart_policy: on_failure
+resources:
+  cpu: 0.5
+  memory_mb: 256

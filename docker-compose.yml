@@ -41,17 +41,86 @@ services:
       - orchestrator-2
       - orchestrator-3
 
+  # --- control-plane stack: workload scheduling, worker heartbeats,
+  # reconciliation, and health-aware dynamic proxy routing. Runs alongside
+  # the orchestrator/proxy stack above rather than replacing it -- the two
+  # demonstrate different execution models within the same repo.
+  control-plane:
+    build: ./control-plane
+    environment:
+      - CTRLPLANE_PORT=7070
+      - CTRLPLANE_RECONCILE_INTERVAL=2s
+      - CTRLPLANE_HEARTBEAT_TIMEOUT=15s
+    ports:
+      - "7070:7070"
+
+  worker-1:
+    build: ./control-plane
+    entrypoint: ["/usr/local/bin/worker"]
+    environment:
+      - WORKER_CONTROL_PLANE_URL=http://control-plane:7070
+      - WORKER_HOSTNAME=worker-1
+      - WORKER_ADDRESS=http://worker-1:9100
+      - WORKER_MAX_CONCURRENT_JOBS=4
+      - WORKER_METRICS_PORT=9100
+    expose:
+      - "9100"
+    depends_on:
+      - control-plane
+
+  worker-2:
+    build: ./control-plane
+    entrypoint: ["/usr/local/bin/worker"]
+    environment:
+      - WORKER_CONTROL_PLANE_URL=http://control-plane:7070
+      - WORKER_HOSTNAME=worker-2
+      - WORKER_ADDRESS=http://worker-2:9101
+      - WORKER_MAX_CONCURRENT_JOBS=4
+      - WORKER_METRICS_PORT=9101
+    expose:
+      - "9101"
+    depends_on:
+      - control-plane
+
+  worker-3:
+    build: ./control-plane
+    entrypoint: ["/usr/local/bin/worker"]
+    environment:
+      - WORKER_CONTROL_PLANE_URL=http://control-plane:7070
+      - WORKER_HOSTNAME=worker-3
+      - WORKER_ADDRESS=http://worker-3:9102
+      - WORKER_MAX_CONCURRENT_JOBS=4
+      - WORKER_METRICS_PORT=9102
+    expose:
+      - "9102"
+    depends_on:
+      - control-plane
+
+  dynamic-proxy:
+    build: ./reverse-proxy-load-balancer
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./config/dynamic-proxy.yaml:/config.yaml:ro
+    command: ["-config=/config.yaml"]
+    depends_on:
+      - control-plane
+      - worker-1
+      - worker-2
+      - worker-3
+
+  # No depends_on here: Prometheus tolerates scrape targets that aren't up
+  # yet (they just show as "down" until they appear), so it doesn't need to
+  # wait on every other service. This also means `docker compose up
+  # <subset>` (e.g. run-local-cluster.sh's control-plane-only subset) won't
+  # transitively pull in the unrelated orchestrator/proxy stack just because
+  # Prometheus scrapes both.
   prometheus:
     image: prom/prometheus:latest
     ports:
       - "9090:9090"
     volumes:
       - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-    depends_on:
-      - orchestrator-1
-      - orchestrator-2
-      - orchestrator-3
-      - proxy
 
   grafana:
     image: grafana/grafana:latest
@@ -61,6 +130,7 @@ services:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./ml-job-orchestrator/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./ml-job-orchestrator/grafana/dashboard.json:/var/lib/grafana/dashboards/dashboard.json:ro
+      - ./ml-job-orchestrator/grafana/dashboard.json:/var/lib/grafana/dashboards/orchestrator-dashboard.json:ro
+      - ./control-plane/deployments/grafana/control-plane-dashboard.json:/var/lib/grafana/dashboards/control-plane-dashboard.json:ro
     depends_on:
       - prometheus

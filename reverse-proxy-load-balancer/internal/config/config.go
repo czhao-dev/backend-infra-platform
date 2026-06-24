@@ -15,8 +15,19 @@ type Config struct {
 	LoadBalancer LoadBalancerConfig `yaml:"load_balancer"`
 	HealthCheck  HealthCheckConfig  `yaml:"health_check"`
 	Backends     []BackendConfig    `yaml:"backends"`
+	Discovery    DiscoveryConfig    `yaml:"discovery"`
 	Logging      LoggingConfig      `yaml:"logging"`
 	Metrics      MetricsConfig      `yaml:"metrics"`
+}
+
+// DiscoveryConfig configures fetching the backend list dynamically from a
+// control plane instead of using the static Backends list below. This is
+// strictly opt-in (Enabled defaults to false), so existing static-YAML
+// deployments are unaffected.
+type DiscoveryConfig struct {
+	Enabled         bool     `yaml:"enabled"`
+	ControlPlaneURL string   `yaml:"control_plane_url"`
+	RefreshInterval Duration `yaml:"refresh_interval"`
 }
 
 type ServerConfig struct {
@@ -122,6 +133,10 @@ func applyDefaults(cfg *Config) {
 		}
 	}
 
+	if cfg.Discovery.RefreshInterval == 0 {
+		cfg.Discovery.RefreshInterval = Duration(5 * time.Second)
+	}
+
 	if cfg.Logging.Level == "" {
 		cfg.Logging.Level = "info"
 	}
@@ -136,8 +151,11 @@ func applyDefaults(cfg *Config) {
 
 // Validate checks that the configuration is usable.
 func (c *Config) Validate() error {
-	if len(c.Backends) == 0 {
-		return fmt.Errorf("at least one backend must be configured")
+	if !c.Discovery.Enabled && len(c.Backends) == 0 {
+		return fmt.Errorf("at least one backend must be configured (or enable discovery)")
+	}
+	if c.Discovery.Enabled && c.Discovery.ControlPlaneURL == "" {
+		return fmt.Errorf("discovery.control_plane_url is required when discovery.enabled is true")
 	}
 	for _, b := range c.Backends {
 		if b.Name == "" {

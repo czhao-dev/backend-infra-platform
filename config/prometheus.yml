@@ -9,3 +9,15 @@ scrape_configs:
   - job_name: proxy
     static_configs:
       - targets: ["proxy:8080"]
+
+  - job_name: control-plane
+    static_configs:
+      - targets: ["control-plane:7070"]
+
+  - job_name: workers
+    static_configs:
+      - targets: ["worker-1:9100", "worker-2:9101", "worker-3:9102"]
+
+  - job_name: dynamic-proxy
+    static_configs:
+      - targets: ["dynamic-proxy:8080"]

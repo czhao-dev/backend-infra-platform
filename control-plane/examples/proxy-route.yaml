@@ -1,0 +1,9 @@
+name: worker-api
+path_prefix: /workers
+strategy: least_conn
+health_check:
+  path: /healthz
+  interval_seconds: 5
+retry_policy:
+  max_attempts: 3
+  per_try_timeout_ms: 500
