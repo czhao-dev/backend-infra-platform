@@ -1,6 +1,6 @@
 # Backend Infrastructure Platform
 
-A mini infrastructure control plane: it accepts declarative workload specs, schedules jobs onto registered worker nodes, tracks worker health via heartbeats, reconciles desired vs. actual state, recovers from worker failures, and drives a health-aware reverse proxy's routing — all with Prometheus/Grafana observability across the whole stack.
+A mini infrastructure control plane that accepts declarative workload specs, schedules jobs onto registered worker nodes, tracks worker health via heartbeats, reconciles desired vs. actual state, recovers from worker failures, and drives a health-aware reverse proxy — with Prometheus/Grafana observability across the full stack.
 
 ```
                         infractl / curl
@@ -26,7 +26,7 @@ A mini infrastructure control plane: it accepts declarative workload specs, sche
                Prometheus :9090   Grafana :3000
 ```
 
-This control-plane/worker stack runs **alongside**, not instead of, this repo's original demo: a static reverse-proxy/load-balancer (`:8080`) fronting 3 standalone `ml-job-orchestrator` replicas. The two demonstrate different execution models within the same repo:
+This control-plane/worker stack runs **alongside** — not instead of — the repo's original demo: a static reverse-proxy/load-balancer (`:8080`) fronting 3 standalone `ml-job-orchestrator` replicas. The two demonstrate different execution models within the same repo:
 
 - [`control-plane/`](control-plane/) — the control plane: declarative workloads, worker registration/heartbeats, FIFO + resource-aware scheduling, desired-state reconciliation, failure detection and rescheduling, dead-lettering, and a backend-discovery API the proxy can poll. CLI: `infractl`.
 - [`reverse-proxy-load-balancer/`](reverse-proxy-load-balancer/README.md) — reverse proxy / load balancer: round-robin/least-conn/weighted strategies, active health checking, retry/failover. Runs **twice** in this repo: once with a static backend list (`proxy`, `:8080`, fronting the orchestrators) and once with dynamic control-plane discovery (`dynamic-proxy`, `:8081`, fronting the worker fleet).
@@ -40,7 +40,7 @@ See each project's own README/docs for implementation details — this README co
 ./control-plane/scripts/run-local-cluster.sh
 ```
 
-Builds and starts the control plane, 3 workers, the dynamic-discovery proxy, Prometheus, and Grafana (a focused subset — it does not also start the orchestrator/proxy stack below).
+Builds and starts the control plane, 3 workers, the dynamic-discovery proxy, Prometheus, and Grafana. This is a focused subset — it does not also start the orchestrator/proxy stack below.
 
 - **Control plane API**: http://localhost:7070
 - **Dynamic proxy**: http://localhost:8081 (backend status: `/admin/backends`)
@@ -56,7 +56,7 @@ Then walk through the demo scripts in [`control-plane/scripts/`](control-plane/s
 ./control-plane/scripts/benchmark-scheduler.sh   # throughput: workloads submitted to all jobs scheduled
 ```
 
-Or drive it directly with `infractl` (`cd control-plane && go run ./cmd/infractl ...`, `INFRACTL_SERVER` defaults to `http://localhost:7070`):
+Or drive it directly with `infractl` (`cd control-plane && go run ./cmd/infractl ...`; `INFRACTL_SERVER` defaults to `http://localhost:7070`):
 
 ```bash
 infractl workload submit examples/batch-job.yaml
@@ -65,7 +65,7 @@ infractl worker list
 infractl cluster status
 ```
 
-**Known limitation:** a worker that crashes and never comes back stays `UNHEALTHY` in the control plane's store forever (heartbeat timeout only ever flips `HEALTHY → UNHEALTHY`; there's no automatic garbage-collection of permanently-dead workers). Its jobs do get correctly rescheduled onto the remaining healthy workers — this is a bookkeeping gap, not a scheduling one. A `drain`-then-timeout path does fully remove a worker (see `internal/reconciler`).
+**Known limitation:** a worker that crashes and never comes back stays `UNHEALTHY` in the control plane's store forever — the heartbeat timeout only ever flips `HEALTHY → UNHEALTHY`; there's no automatic garbage-collection of permanently-dead workers. Its jobs are correctly rescheduled onto the remaining healthy workers, so this is a bookkeeping gap, not a scheduling one. A `drain`-then-timeout path does fully remove a worker (see `internal/reconciler`).
 
 ## Quickstart: original orchestrator/proxy stack
 
@@ -73,7 +73,7 @@ infractl cluster status
 docker compose up --build proxy orchestrator-1 orchestrator-2 orchestrator-3 prometheus grafana
 ```
 
-This builds and starts 3 orchestrator replicas, the static-config proxy in front of them, Prometheus, and Grafana. Give it ~5-10 seconds after startup for the proxy's active health checker to mark all 3 replicas healthy before traffic looks fully balanced.
+Builds and starts 3 orchestrator replicas, the static-config proxy, Prometheus, and Grafana. Allow ~5–10 seconds after startup for the proxy's active health checker to mark all 3 replicas healthy before traffic is fully balanced.
 
 - **Proxy (entry point)**: http://localhost:8080 (backend status: `/admin/backends`)
 
@@ -83,7 +83,7 @@ Submit a job through the proxy:
 curl -X POST localhost:8080/jobs -d '{"type":"training","command":"sleep 2"}'
 ```
 
-**Known limitation: per-replica state.** Each orchestrator replica keeps its own independent in-memory job store — there is no shared backing store across replicas. Because the proxy load-balances round-robin, a job submitted via `POST /jobs` might land on `orchestrator-2`, but a later `GET /jobs/{id}` or `DELETE /jobs/{id}` can be routed to `orchestrator-1` or `orchestrator-3` and return `404`, since that replica never saw the job. Fixing it properly would mean either sticky routing by job ID or a shared backing store — both reasonable extensions, out of scope here.
+**Known limitation: per-replica state.** Each orchestrator replica keeps an independent in-memory job store with no shared backing store across replicas. Because the proxy load-balances round-robin, a job submitted via `POST /jobs` might land on `orchestrator-2`, but a later `GET /jobs/{id}` or `DELETE /jobs/{id}` can be routed to `orchestrator-1` or `orchestrator-3` and return `404`. Fixing this properly requires either sticky routing by job ID or a shared backing store — both reasonable extensions, out of scope here.
 
 `ml-job-orchestrator`'s CLI (`mlctl`) defaults to `MLCTL_SERVER=http://localhost:8080`, pointing at this proxy.
 
@@ -91,9 +91,9 @@ You can run `docker compose up --build` with no service names to start *everythi
 
 ## Local Go development
 
-This is three independent Go modules (`control-plane/`, `ml-job-orchestrator/`, `reverse-proxy-load-balancer/`) tied together by a root [`go.work`](go.work) so editors/tools can resolve imports across all three without juggling module roots. `go.work` is a dev convenience only — none of the three modules has a `replace` directive on another, so each still builds/tests/vets as a fully standalone module.
+Three independent Go modules (`control-plane/`, `ml-job-orchestrator/`, `reverse-proxy-load-balancer/`) are tied together by a root [`go.work`](go.work) so editors and tools can resolve imports across all three without juggling module roots. `go.work` is a dev convenience only — none of the modules has a `replace` directive on another, so each builds, tests, and vets as a fully standalone module.
 
-Note `go build ./...` does **not** work from the repo root itself (there's no module at the root, only the workspace file) — run it per-module, or pass explicit paths:
+Note: `go build ./...` does **not** work from the repo root (there is no module at the root, only the workspace file). Run it per-module, or pass explicit paths:
 
 ```bash
 go build ./control-plane/... ./ml-job-orchestrator/... ./reverse-proxy-load-balancer/...
@@ -105,7 +105,7 @@ or `cd` into any one module and run `go build ./... && go test ./...` there dire
 
 ## Standalone use
 
-Each subdirectory remains a fully independent project — own `go.mod`, `Dockerfile`, and (for the two original modules) `docker-compose.yml`/`LICENSE`:
+Each subdirectory is a fully independent project with its own `go.mod`, `Dockerfile`, and (for the two original modules) `docker-compose.yml`/`LICENSE`:
 
 ```bash
 cd ml-job-orchestrator && docker compose up --build           # orchestrator + prometheus + grafana alone
@@ -113,4 +113,16 @@ cd reverse-proxy-load-balancer && docker compose up --build   # proxy + its own 
 cd control-plane && go build ./... && go test ./...           # control plane builds/tests with zero Docker
 ```
 
-`control-plane/` doesn't ship its own `docker-compose.yml` since its demo stack (workers, dynamic proxy, shared Prometheus/Grafana) is inherently multi-service and lives in the root [`docker-compose.yml`](docker-compose.yml) instead.
+`control-plane/` does not ship its own `docker-compose.yml` — its demo stack (workers, dynamic proxy, shared Prometheus/Grafana) is inherently multi-service and lives in the root [`docker-compose.yml`](docker-compose.yml) instead.
+
+## References
+
+- [Go Workspaces](https://go.dev/doc/workspaces) — the `go.work` mechanism used to tie the three modules together for local development
+- [gorilla/mux](https://github.com/gorilla/mux) — HTTP router used by `ml-job-orchestrator`
+- [Prometheus Go client](https://github.com/prometheus/client_golang) — instrumentation library used by all three modules
+- [Prometheus](https://prometheus.io/docs/introduction/overview/) — metrics collection and alerting
+- [Grafana](https://grafana.com/docs/grafana/latest/) — metrics visualization and dashboards
+- [Docker Compose](https://docs.docker.com/compose/) — local multi-service orchestration for the demo stacks
+- [Kubernetes controller pattern](https://kubernetes.io/docs/concepts/architecture/controller/) — the reconcile-loop (desired vs. actual state) design that inspired `internal/reconciler`
+- [gopkg.in/yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML parsing used for declarative workload spec files
+- [testify](https://github.com/stretchr/testify) — assertion and mock library used across all three modules
