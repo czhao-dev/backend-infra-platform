@@ -1,13 +1,13 @@
 # Backend Infrastructure Platform
 
-A mini infrastructure control plane that accepts declarative workload specs, schedules jobs onto registered worker nodes, tracks worker health via heartbeats, reconciles desired vs. actual state, recovers from worker failures, and drives a health-aware reverse proxy — with Prometheus/Grafana observability across the full stack.
+A declarative infrastructure control plane that accepts Deployment specs, schedules Pods onto registered Nodes, tracks Node health via heartbeats, reconciles desired vs. actual state, recovers from Node failures, and drives a health-aware reverse proxy — with Prometheus/Grafana observability across the full stack.
 
 ```
                         infractl / curl
                               │
                               ▼
                      ┌─────────────────┐
-                     │  control-plane  │  workloads, jobs, workers, routes
+                     │  control-plane  │  deployments, pods, nodes, services
                      │      :7070      │  scheduler + reconciler loops
                      └────────┬────────┘
               ┌───────────────┼───────────────┐
@@ -17,7 +17,7 @@ A mini infrastructure control plane that accepts declarative workload specs, sch
               ▲               ▲               ▲
               └───────────────┼───────────────┘
                      ┌─────────────────┐
-       client  ───▶  │  dynamic-proxy  │  fetches healthy workers from the
+       client  ───▶  │  dynamic-proxy  │  fetches healthy nodes from the
                      │      :8081      │  control plane, routes/fails over
                      └─────────────────┘
                               │
@@ -28,8 +28,8 @@ A mini infrastructure control plane that accepts declarative workload specs, sch
 
 This control-plane/worker stack runs **alongside** — not instead of — the repo's original demo: a static reverse-proxy/load-balancer (`:8080`) fronting 3 standalone `ml-job-orchestrator` replicas. The two demonstrate different execution models within the same repo:
 
-- [`control-plane/`](control-plane/) — the control plane: declarative workloads, worker registration/heartbeats, FIFO + resource-aware scheduling, desired-state reconciliation, failure detection and rescheduling, dead-lettering, and a backend-discovery API the proxy can poll. CLI: `infractl`.
-- [`reverse-proxy-load-balancer/`](reverse-proxy-load-balancer/README.md) — reverse proxy / load balancer: round-robin/least-conn/weighted strategies, active health checking, retry/failover. Runs **twice** in this repo: once with a static backend list (`proxy`, `:8080`, fronting the orchestrators) and once with dynamic control-plane discovery (`dynamic-proxy`, `:8081`, fronting the worker fleet).
+- [`control-plane/`](control-plane/) — the control plane: declarative Deployments, Node registration/heartbeats, FIFO + resource-aware scheduling, desired-state reconciliation, failure detection and rescheduling, dead-lettering, label-based Service discovery, and a backend-discovery API the proxy can poll. CLI: `infractl`.
+- [`reverse-proxy-load-balancer/`](reverse-proxy-load-balancer/README.md) — reverse proxy / load balancer: round-robin/least-conn/weighted strategies, active health checking, retry/failover. Runs **twice** in this repo: once with a static backend list (`proxy`, `:8080`, fronting the orchestrators) and once with dynamic control-plane discovery (`dynamic-proxy`, `:8081`, fronting the node fleet).
 - [`ml-job-orchestrator/`](ml-job-orchestrator/README.md) — the original standalone REST API job scheduler (worker pool, subprocess executor, retry/backoff, in-memory state store). Still fully independent; see its own README.
 
 See each project's own README/docs for implementation details — this README covers how the pieces fit together.
@@ -40,7 +40,7 @@ See each project's own README/docs for implementation details — this README co
 ./control-plane/scripts/run-local-cluster.sh
 ```
 
-Builds and starts the control plane, 3 workers, the dynamic-discovery proxy, Prometheus, and Grafana. This is a focused subset — it does not also start the orchestrator/proxy stack below.
+Builds and starts the control plane, 3 node agents, the dynamic-discovery proxy, Prometheus, and Grafana. This is a focused subset — it does not also start the orchestrator/proxy stack below.
 
 - **Control plane API**: http://localhost:7070
 - **Dynamic proxy**: http://localhost:8081 (backend status: `/admin/backends`)
@@ -50,22 +50,22 @@ Builds and starts the control plane, 3 workers, the dynamic-discovery proxy, Pro
 Then walk through the demo scripts in [`control-plane/scripts/`](control-plane/scripts/):
 
 ```bash
-./control-plane/scripts/submit-demo-jobs.sh      # submit a 20-job workload, watch it schedule across workers
-./control-plane/scripts/demo-worker-failure.sh   # kill a worker mid-job, watch the reconciler detect and reschedule
-./control-plane/scripts/demo-proxy-failover.sh   # kill a worker, watch the proxy route around it and recover
-./control-plane/scripts/benchmark-scheduler.sh   # throughput: workloads submitted to all jobs scheduled
+./control-plane/scripts/submit-demo-jobs.sh      # submit a 20-pod deployment, watch it schedule across nodes
+./control-plane/scripts/demo-worker-failure.sh   # kill a node mid-pod, watch the reconciler detect and reschedule
+./control-plane/scripts/demo-proxy-failover.sh   # kill a node, watch the proxy route around it and recover
+./control-plane/scripts/benchmark-scheduler.sh   # throughput: deployments submitted to all pods scheduled
 ```
 
 Or drive it directly with `infractl` (`cd control-plane && go run ./cmd/infractl ...`; `INFRACTL_SERVER` defaults to `http://localhost:7070`):
 
 ```bash
-infractl workload submit examples/batch-job.yaml
-infractl workload status <workload-id>
-infractl worker list
+infractl deployment submit examples/batch-job.yaml
+infractl deployment status <deployment-id>
+infractl node list
 infractl cluster status
 ```
 
-**Known limitation:** a worker that crashes and never comes back stays `UNHEALTHY` in the control plane's store forever — the heartbeat timeout only ever flips `HEALTHY → UNHEALTHY`; there's no automatic garbage-collection of permanently-dead workers. Its jobs are correctly rescheduled onto the remaining healthy workers, so this is a bookkeeping gap, not a scheduling one. A `drain`-then-timeout path does fully remove a worker (see `internal/reconciler`).
+**Known limitation:** a node that crashes and never comes back stays `UNHEALTHY` in the control plane's store forever — the heartbeat timeout only ever flips `HEALTHY → UNHEALTHY`; there's no automatic garbage-collection of permanently-dead nodes. Its pods are correctly rescheduled onto the remaining healthy nodes, so this is a bookkeeping gap, not a scheduling one. A `drain`-then-timeout path does fully remove a node (see `internal/reconciler`).
 
 ## Quickstart: original orchestrator/proxy stack
 
@@ -124,5 +124,6 @@ cd control-plane && go build ./... && go test ./...           # control plane bu
 - [Grafana](https://grafana.com/docs/grafana/latest/) — metrics visualization and dashboards
 - [Docker Compose](https://docs.docker.com/compose/) — local multi-service orchestration for the demo stacks
 - Controller / reconcile-loop pattern — the desired-vs-actual-state design that inspired `internal/reconciler`
-- [gopkg.in/yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML parsing used for declarative workload spec files
+- [go.etcd.io/bbolt](https://pkg.go.dev/go.etcd.io/bbolt) — embedded single-file ACID key-value store used as the persistent state backend in `control-plane/`
+- [gopkg.in/yaml.v3](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML parsing used for declarative deployment spec files
 - [testify](https://github.com/stretchr/testify) — assertion and mock library used across all three modules
