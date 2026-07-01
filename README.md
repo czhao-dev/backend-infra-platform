@@ -1,4 +1,4 @@
-# Backend Infrastructure Platform
+# Distributed Container Orchestration Platform
 
 A declarative infrastructure control plane that accepts Deployment specs, schedules Pods onto registered Nodes, tracks Node health via heartbeats, reconciles desired vs. actual state, recovers from Node failures, and drives a health-aware reverse proxy — with Prometheus/Grafana observability across the full stack.
 
